@@ -1,0 +1,87 @@
+name: Deploy Sync Jobs
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: landbrugsdata-1
+  REGION: europe-west1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      matrix:
+        service:
+          - name: cadastral-sync
+            cpu: 4
+            memory: 8Gi
+            secrets: DB_PASSWORD=db-password:latest,DATAFORDELER_USERNAME=datafordeler-username:latest,DATAFORDELER_PASSWORD=datafordeler-password:latest
+            sync_type: cadastral
+          - name: wetlands-sync
+            cpu: 2
+            memory: 4Gi
+            secrets: DB_PASSWORD=db-password:latest
+            sync_type: wetlands
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Build and Push Container
+      run: |
+        cd backend
+        gcloud builds submit --config cloudbuild.yaml --substitutions=_SERVICE_NAME=${{ matrix.service.name }} . --quiet
+
+    - name: Deploy Cloud Run Job
+      run: |
+        set -e
+        echo "Deploying ${{ matrix.service.name }}..."
+        
+        # Set environment variables including SYNC_TYPE
+        ENV_VARS="DB_HOST=/cloudsql/$PROJECT_ID:$REGION:landbrugsdata-db,DB_NAME=landbrugsdata,DB_USER=landbrugsdata,SYNC_TYPE=${{ matrix.service.sync_type }}"
+        
+        if ! gcloud run jobs update ${{ matrix.service.name }} \
+          --image gcr.io/$PROJECT_ID/${{ matrix.service.name }} \
+          --region $REGION \
+          --service-account="cadastral-sync-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+          --set-secrets=${{ matrix.service.secrets }} \
+          --set-env-vars=$ENV_VARS \
+          --cpu=${{ matrix.service.cpu }} \
+          --memory=${{ matrix.service.memory }} \
+          --max-retries=3 \
+          --task-timeout=4h \
+          --set-cloudsql-instances=$PROJECT_ID:$REGION:landbrugsdata-db; then
+          echo "Job doesn't exist, creating new job..."
+          gcloud run jobs create ${{ matrix.service.name }} \
+            --image gcr.io/$PROJECT_ID/${{ matrix.service.name }} \
+            --region $REGION \
+            --service-account="cadastral-sync-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+            --set-secrets=${{ matrix.service.secrets }} \
+            --set-env-vars=$ENV_VARS \
+            --cpu=${{ matrix.service.cpu }} \
+            --memory=${{ matrix.service.memory }} \
+            --max-retries=3 \
+            --task-timeout=4h \
+            --set-cloudsql-instances=$PROJECT_ID:$REGION:landbrugsdata-db
+        fi
+        
+        echo "Deployment of ${{ matrix.service.name }} completed successfully"

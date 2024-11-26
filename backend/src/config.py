@@ -10,9 +10,10 @@ SOURCES = {
     },
     "wetlands": {
         "name": "Danish Wetlands Map",
-        "type": "shapefile",
+        "type": "wfs",
         "description": "Wetland areas from Danish EPA",
-        "filename": "kulstof2022",
+        "url": "https://wfs2-miljoegis.mim.dk/natur/wfs",
+        "layer": "natur:kulstof2022",
         "frequency": "static",
         "enabled": True
     },
@@ -20,7 +21,7 @@ SOURCES = {
         "name": "Danish Cadastral Properties",
         "type": "wfs",
         "description": "Current real estate property boundaries",
-        "url": "https://services.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/Wfs",
+        "url": "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS",
         "frequency": "weekly",
         "enabled": True
     }
