@@ -1,14 +1,10 @@
+import os
 import asyncio
 import logging
-import os
-from scripts.sync_cadastral import main as sync_cadastral
-from scripts.sync_wetlands import main as sync_wetlands
+from src.sources.parsers import get_source_handler
+from src.config import SOURCES
 
-# Configure logging with more detail
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def run_sync() -> bool:
@@ -17,32 +13,36 @@ async def run_sync() -> bool:
     logger.info(f"Starting sync process for: {sync_type}")
     
     try:
-        if sync_type == 'cadastral':
-            total_synced = await sync_cadastral()
-            if total_synced is not None:
-                logger.info(f"Cadastral sync completed. Total records: {total_synced:,}")
-            
-        elif sync_type == 'wetlands':
-            total_synced = await sync_wetlands()
-            if total_synced is not None:
-                logger.info(f"Wetlands sync completed. Total records: {total_synced:,}")
-            
-        elif sync_type == 'all':
-            # Run both syncs
-            cadastral_total = await sync_cadastral()
-            wetlands_total = await sync_wetlands()
-            logger.info(f"All syncs completed. Cadastral: {cadastral_total:,}, Wetlands: {wetlands_total:,}")
-        
+        if sync_type == 'all':
+            for source_id, config in SOURCES.items():
+                if config['enabled']:
+                    source = get_source_handler(source_id, config)
+                    if source:
+                        total_synced = await source.sync()
+                        logger.info(f"{source_id} sync completed. Total records: {total_synced:,}")
         else:
-            logger.error(f"Unknown sync type: {sync_type}")
-            return False
-            
+            if sync_type not in SOURCES:
+                logger.error(f"Unknown sync type: {sync_type}")
+                return False
+                
+            config = SOURCES[sync_type]
+            if not config['enabled']:
+                logger.error(f"Sync type {sync_type} is disabled")
+                return False
+                
+            source = get_source_handler(sync_type, config)
+            if not source:
+                logger.error(f"No handler for sync type: {sync_type}")
+                return False
+                
+            total_synced = await source.sync()
+            logger.info(f"{sync_type} sync completed. Total records: {total_synced:,}")
+        
         return True
         
     except Exception as e:
-        logger.error(f"Sync failed: {str(e)}", exc_info=True)
+        logger.error(f"Error during sync: {str(e)}")
         return False
 
 if __name__ == "__main__":
-    success = asyncio.run(run_sync())
-    exit(0 if success else 1)
+    asyncio.run(run_sync())

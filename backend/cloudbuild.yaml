@@ -10,7 +10,7 @@ steps:
     args: [
       'build',
       '-t', 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}',
-      '-f', 'Dockerfile.sync',
+      '-f', '${_DOCKERFILE}',
       '--cache-from', 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest',
       '--build-arg', 'BUILDKIT_INLINE_CACHE=1',
       '.'
@@ -26,7 +26,8 @@ images:
   - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
 
 substitutions:
-  _SERVICE_NAME: sync
+  _SERVICE_NAME: data-sync
+  _DOCKERFILE: Dockerfile.sync
 
 options:
   machineType: 'E2_HIGHCPU_8'
